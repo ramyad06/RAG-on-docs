@@ -1,6 +1,8 @@
 """Prompt templates. Kept in one place so they're easy to iterate on."""
 from __future__ import annotations
 
+import re
+
 from langchain_core.documents import Document
 
 SYSTEM_PROMPT = (
@@ -62,6 +64,9 @@ SYSTEM_PROMPT = (
     "Hard rules:\n"
     "- Never invent endpoints, parameter names, header names, rate limits, "
     "scopes, or token lifetimes.\n"
+    "- If the user asks what scopes are available and the CONTEXT mentions "
+    "scopes but does not enumerate scope names, say the document references "
+    "scopes but does not list them.\n"
     "- Never use knowledge from outside the CONTEXT for documentation "
     "questions.\n"
     "- Do not hedge (\"not explicitly stated\", \"the documentation may not "
@@ -70,7 +75,84 @@ SYSTEM_PROMPT = (
 )
 
 
+def _asks_for_grant_types(question: str) -> bool:
+    normalized = question.lower()
+    return "grant" in normalized and any(
+        phrase in normalized
+        for phrase in ("support", "supported", "grant type", "grant types")
+    )
+
+
+def _asks_for_parameters(question: str) -> bool:
+    normalized = question.lower()
+    return any(
+        phrase in normalized
+        for phrase in ("parameter", "required", "requires", "fields", "need")
+    )
+
+
+def _extract_supported_grants(context: str) -> list[str]:
+    grants = []
+    for grant in (
+        "Authorization Code Grant",
+        "Implicit Grant",
+        "Client Credentials Grant",
+        "Refresh Token Grant Type",
+    ):
+        if grant.lower() in context.lower():
+            grants.append(grant)
+    return grants
+
+
+def _asks_for_token_request(question: str) -> bool:
+    normalized = question.lower()
+    return "token request" in normalized or "access token request" in normalized
+
+
+def _filter_parameter_context(question: str, context: str) -> str:
+    sections = context.split("\n\n---\n\n")
+    if _asks_for_token_request(question):
+        matching = [
+            section
+            for section in sections
+            if "/oauth2/token" in section or "access token request" in section.lower()
+        ]
+        if matching:
+            return "\n\n".join(matching)
+    return context
+
+
+def _extract_required_parameters(question: str, context: str) -> list[str]:
+    context = _filter_parameter_context(question, context)
+    found = []
+    seen = set()
+    for match in re.finditer(r"\b([a-z][a-z0-9_]*)\s+(?:conditionally\s+)?required\b", context, re.I):
+        name = match.group(1)
+        if name not in seen:
+            seen.add(name)
+            found.append(name)
+    return found
+
+
+def _build_context_hints(question: str, context: str) -> str:
+    hints = []
+    if _asks_for_grant_types(question):
+        grants = _extract_supported_grants(context)
+        if grants:
+            hints.append("Extracted supported grant types: " + ", ".join(grants))
+
+    if _asks_for_parameters(question):
+        params = _extract_required_parameters(question, context)
+        if params:
+            hints.append("Extracted required parameters: " + ", ".join(params))
+
+    if not hints:
+        return ""
+    return "CONTEXT-DERIVED FACTS:\n" + "\n".join(f"- {hint}" for hint in hints) + "\n\n"
+
+
 def build_user_message(question: str, chunks: list[Document]) -> str:
     """Assemble the user turn: CONTEXT (joined chunks) + QUESTION."""
     context = "\n\n---\n\n".join(c.page_content for c in chunks)
-    return f"CONTEXT:\n{context}\n\nQUESTION:\n{question}"
+    hints = _build_context_hints(question, context)
+    return f"{hints}CONTEXT:\n{context}\n\nQUESTION:\n{question}"

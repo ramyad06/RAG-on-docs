@@ -14,7 +14,10 @@ After ingesting the provided PDF (26 pages, 57,979 chars with `pdfplumber`, 151 
 
 ## Difficulties faced
 
-- **The PDF is a partial reference — load-bearing facts live behind hyperlinks.** Several eval-question answers (rate limits especially) are not in the PDF body at all; the PDF *links* to `developers.upwork.com` and `support.upwork.com` where the actual numbers live. I added `src/loaders/web.py`, which extracts every hyperlink the PDF annotations expose (`page.hyperlinks` via pdfplumber), filters to an allowlist of Upwork domains, fetches each page once (HTML cached under `.web_cache/`), strips nav/footer/scripts with BeautifulSoup, and feeds the cleaned text into the same 500/50 chunker. This is what makes the "300 requests per minute per IP" / "40K requests per day" content retrievable for Q1 — it lives on the developer-portal landing page that the PDF links to, not in the PDF itself.
+- **Source boundary.** The bot indexes only the provided PDF. Hyperlinked web
+  pages are intentionally excluded so omitted facts, such as rate limits,
+  remain hallucination-guard cases instead of being answered from outside
+  pages.
 - **PDF text quality — diagnosed and fixed.** The first iteration used `pypdf`, which flattens tables into hard-to-parse runs. Empirically, the top-3 chunks for Q3 missed the load-bearing *"only available to Enterprise consumers"* sentence because that sentence lives inside a table-styled section that `pypdf` mangled. Switching to `pdfplumber` and serializing tables back to text rows lifted total extracted characters from 43,445 → 57,979 (+34%) and brought the Enterprise-only chunk into Q3's top-3. The 500/50 chunker is unchanged — we improved the input to it, not the chunker itself.
 - **Embedding model upgrade.** Swapped `all-MiniLM-L6-v2` (22M params, 384-dim) for `BAAI/bge-small-en-v1.5` (33M params, 384-dim). Same dimensionality (no schema change), still local, but a markedly stronger MTEB-retrieval performer on technical English. Together with the loader change, this is what made Q3 surface both premises.
 - **First-run latency.** The `all-MiniLM-L6-v2` model is downloaded on first use (~90 MB) and embedding ~100 chunks takes ~10–20 s on a laptop CPU. Subsequent runs are instant because the Chroma index is persisted to `./chroma_db/`.

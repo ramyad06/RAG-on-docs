@@ -180,3 +180,60 @@ class RetrieveTest(unittest.TestCase):
         self.assertIn("grant_type required", results[0].page_content)
         self.assertIn("client_secret required", results[0].page_content)
         self.assertIn("redirect_uri required", results[0].page_content)
+
+    def test_retrieve_promotes_supported_grants_section(self):
+        docs = [
+            Document(
+                page_content=(
+                    "Endpoint GET https://www.upwork.com/ab/account-security/"
+                    "oauth2/authorize Parameters response_type required, string. "
+                    "Valid values: code, token."
+                )
+            ),
+            Document(
+                page_content=(
+                    "Supported Grants Authorization Code Grant - requires "
+                    "authorization request and access token request calls. "
+                    "Implicit Grant - requires an authorization request call. "
+                    "Client Credentials Grant - requires an access token request "
+                    "call. Refresh Token Grant Type - requires an access token "
+                    "request call."
+                )
+            ),
+        ]
+        vectorstore = _FakeVectorstore(docs)
+
+        results = rag.retrieve(
+            "What OAuth 2.0 grant types does Upwork support?",
+            vectorstore,
+            k=1,
+        )
+
+        self.assertIn("Supported Grants", results[0].page_content)
+        self.assertIn("Client Credentials Grant", results[0].page_content)
+
+    def test_retrieve_promotes_graphql_status_code_explanation(self):
+        docs = [
+            Document(
+                page_content=(
+                    "REST endpoints return HTTP status codes in the error "
+                    "response, for example, 400 - Bad Request."
+                )
+            ),
+            Document(
+                page_content=(
+                    "In case of malformed syntax, GraphQL always returns a "
+                    "200 - OK status code, regardless of whether the operation "
+                    "succeeded or failed."
+                )
+            ),
+        ]
+        vectorstore = _FakeVectorstore(docs)
+
+        results = rag.retrieve(
+            "Does Upwork's GraphQL API return HTTP 400 for bad requests?",
+            vectorstore,
+            k=1,
+        )
+
+        self.assertIn("200 - OK", results[0].page_content)

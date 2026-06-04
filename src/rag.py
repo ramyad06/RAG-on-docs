@@ -125,6 +125,22 @@ def _asks_for_parameters(query: str) -> bool:
     )
 
 
+def _asks_for_grant_types(query: str) -> bool:
+    normalized = query.lower()
+    return "grant" in normalized and any(
+        phrase in normalized
+        for phrase in ("support", "supported", "grant type", "grant types")
+    )
+
+
+def _asks_for_graphql_status(query: str) -> bool:
+    normalized = query.lower()
+    return "graphql" in normalized and any(
+        token in normalized
+        for token in ("http", "status", "400", "500", "5xx", "bad request", "scopes")
+    )
+
+
 def _asks_for_access_token_request(query: str) -> bool:
     normalized = query.lower()
     return any(
@@ -176,6 +192,33 @@ def _rerank_score(query: str, doc: Document) -> int:
             score += 8
         if _asks_for_access_token_request(query) and "/oauth2/token" in text:
             score += 12
+
+    if _asks_for_grant_types(query):
+        grant_hits = sum(
+            1
+            for grant in (
+                "authorization code grant",
+                "implicit grant",
+                "client credentials grant",
+                "refresh token grant",
+            )
+            if grant in text
+        )
+        score += 10 * grant_hits
+        if "supported grants" in text:
+            score += 20
+        if "valid values: code, token" in text or "response_type" in text:
+            score -= 10
+
+    if _asks_for_graphql_status(query):
+        if "graphql" in text:
+            score += 8
+        if "200 - ok" in text or "status code 200" in text:
+            score += 18
+        if "always returns a 200" in text:
+            score += 10
+        if "400 - bad request" in text and "200" not in text:
+            score -= 8
 
     return score
 

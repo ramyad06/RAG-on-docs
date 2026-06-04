@@ -1,4 +1,4 @@
-"""One-time ingestion: PDF + linked pages -> chunks -> embeddings -> Chroma.
+"""One-time ingestion: PDF -> chunks -> embeddings -> Chroma.
 
 Run from the project root:  python -m src.ingest
 """
@@ -19,7 +19,7 @@ from src.config import (
     EMBEDDING_MODEL,
     PDF_PATH,
 )
-from src.loaders import load_pdf, load_web_pages
+from src.loaders import load_pdf
 
 
 def sanity_check(pages: list[Document]) -> None:
@@ -62,12 +62,7 @@ def main() -> None:
     pages = load_pdf(PDF_PATH)
     sanity_check(pages)
 
-    web_docs = load_web_pages(PDF_PATH)
-    web_chars = sum(len(d.page_content) for d in web_docs)
-    print(f"Loaded {len(web_docs)} web pages linked from the PDF "
-          f"({web_chars:,} chars)\n")
-
-    chunks = chunk_documents(pages + web_docs)
+    chunks = chunk_documents(pages)
     print(f"Split into {len(chunks)} chunks "
           f"(chunk_size={CHUNK_SIZE}, overlap={CHUNK_OVERLAP})")
 
