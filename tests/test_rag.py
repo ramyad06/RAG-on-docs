@@ -137,3 +137,46 @@ class RetrieveTest(unittest.TestCase):
 
         self.assertIn("24 hours", results[0].page_content)
         self.assertEqual(len(results), 2)
+
+    def test_retrieve_promotes_required_parameter_tables(self):
+        docs = [
+            Document(
+                page_content=(
+                    "Authorization Code Grant is an OAuth 2.0 flow that enables "
+                    "you to obtain an access token."
+                )
+            ),
+            Document(
+                page_content=(
+                    "Prerequisites Data Description Client ID For each application "
+                    "you develop, you must obtain a client identifier key."
+                )
+            ),
+            Document(
+                page_content=(
+                    "Endpoint GET https://www.upwork.com/ab/account-security/oauth2/"
+                    "authorize Parameters response_type required, string client_id "
+                    "required, string redirect_uri required, string"
+                )
+            ),
+            Document(
+                page_content=(
+                    "Endpoint POST https://www.upwork.com/api/v3/oauth2/token "
+                    "Parameters grant_type required, string client_id required, "
+                    "string client_secret required, string code required, string "
+                    "redirect_uri required, string"
+                )
+            ),
+        ]
+        vectorstore = _FakeVectorstore(docs)
+
+        results = rag.retrieve(
+            "What are the required parameters for the Authorization Code Grant "
+            "access token request?",
+            vectorstore,
+            k=2,
+        )
+
+        self.assertIn("grant_type required", results[0].page_content)
+        self.assertIn("client_secret required", results[0].page_content)
+        self.assertIn("redirect_uri required", results[0].page_content)

@@ -9,12 +9,22 @@ from langchain_huggingface import HuggingFaceEmbeddings
 
 from src.config import CHROMA_DIR, COLLECTION_NAME, EMBEDDING_MODEL, PDF_PATH, TOP_K
 
-CANDIDATE_K = 12
+CANDIDATE_K = 24
 HTTP_METHOD_RE = re.compile(r"\b(GET|POST|PUT|PATCH|DELETE)\b")
 URL_RE = re.compile(r"https?://\S+")
 TIME_VALUE_RE = re.compile(
     r"\b\d+\s*(seconds?|minutes?|hours?|days?|weeks?|months?|years?)\b"
 )
+REQUIRED_PARAMETER_NAMES = {
+    "client_id",
+    "client_secret",
+    "code",
+    "grant_type",
+    "redirect_uri",
+    "redirect_url",
+    "refresh_token",
+    "response_type",
+}
 STOPWORDS = {
     "about",
     "call",
@@ -101,6 +111,33 @@ def _asks_for_duration(query: str) -> bool:
     )
 
 
+def _asks_for_parameters(query: str) -> bool:
+    normalized = query.lower()
+    return any(
+        phrase in normalized
+        for phrase in (
+            "parameter",
+            "required",
+            "requires",
+            "need",
+            "fields",
+        )
+    )
+
+
+def _asks_for_access_token_request(query: str) -> bool:
+    normalized = query.lower()
+    return any(
+        phrase in normalized
+        for phrase in (
+            "access token request",
+            "obtain an access token",
+            "get an access token",
+            "token request",
+        )
+    )
+
+
 def _rerank_score(query: str, doc: Document) -> int:
     text = doc.page_content.lower()
     terms = _query_terms(query)
@@ -125,6 +162,20 @@ def _rerank_score(query: str, doc: Document) -> int:
             score += 8
         if TIME_VALUE_RE.search(text):
             score += 8
+
+    if _asks_for_parameters(query):
+        parameter_hits = sum(1 for name in REQUIRED_PARAMETER_NAMES if name in text)
+        score += 5 * parameter_hits
+        if "parameters" in text:
+            score += 10
+        if "required" in text:
+            score += 6
+        if "grant_type" in text and "authorization_code" in text:
+            score += 8
+        if "client_secret" in text and "code required" in text:
+            score += 8
+        if _asks_for_access_token_request(query) and "/oauth2/token" in text:
+            score += 12
 
     return score
 
