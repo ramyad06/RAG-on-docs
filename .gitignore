@@ -1,0 +1,26 @@
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+chroma_db/
+.web_cache/
+.DS_Store
+.streamlit/secrets.toml
+.streamlit/credentials.toml
+
+# Local AI/agent work artifacts. These are not part of the app deliverable.
+docs/superpowers/
+.codex/
+.claude/
+.cursor/
+.copilot/
+
+# Source documentation — keep local, never push to a public repo.
+docs/*.pdf
+docs/*.docx
