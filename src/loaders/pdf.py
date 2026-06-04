@@ -42,6 +42,7 @@ def load_pdf(path: Path) -> list[Document]:
     if not path.exists():
         raise FileNotFoundError(f"Source PDF not found: {path}")
 
+    source_name = f"{path.parent.name}/{path.name}" if path.parent.name else path.name
     documents: list[Document] = []
     with pdfplumber.open(str(path)) as pdf:
         for page_index, page in enumerate(pdf.pages):
@@ -64,7 +65,7 @@ def load_pdf(path: Path) -> list[Document]:
             documents.append(
                 Document(
                     page_content=page_text,
-                    metadata={"source": str(path), "page": page_index},
+                    metadata={"source": source_name, "page": page_index},
                 )
             )
 
