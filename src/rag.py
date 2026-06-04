@@ -1,11 +1,37 @@
-"""Retrieval layer: open the persisted Chroma index and fetch top-k chunks."""
+"""Retrieval layer: open the persisted Chroma index and fetch relevant chunks."""
 from __future__ import annotations
+
+import re
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 
 from src.config import CHROMA_DIR, COLLECTION_NAME, EMBEDDING_MODEL, PDF_PATH, TOP_K
+
+CANDIDATE_K = 12
+HTTP_METHOD_RE = re.compile(r"\b(GET|POST|PUT|PATCH|DELETE)\b")
+URL_RE = re.compile(r"https?://\S+")
+TIME_VALUE_RE = re.compile(
+    r"\b\d+\s*(seconds?|minutes?|hours?|days?|weeks?|months?|years?)\b"
+)
+STOPWORDS = {
+    "about",
+    "call",
+    "code",
+    "does",
+    "for",
+    "from",
+    "get",
+    "how",
+    "the",
+    "this",
+    "what",
+    "when",
+    "where",
+    "which",
+    "with",
+}
 
 
 def _ensure_vectorstore_exists() -> None:
@@ -25,6 +51,94 @@ def _ensure_vectorstore_exists() -> None:
         )
 
 
+def _query_terms(query: str) -> set[str]:
+    return {
+        token
+        for token in re.findall(r"[a-z0-9]+", query.lower())
+        if len(token) > 2 and token not in STOPWORDS
+    }
+
+
+def _query_phrases(query: str) -> set[str]:
+    normalized = query.lower()
+    phrases = {
+        "access token",
+        "authorization code",
+        "authorization code grant",
+        "callback url",
+        "client credentials",
+        "client secret",
+        "rate limit",
+        "refresh token",
+    }
+    return {phrase for phrase in phrases if phrase in normalized}
+
+
+def _asks_for_endpoint(query: str) -> bool:
+    normalized = query.lower()
+    endpoint_words = {"endpoint", "url", "uri", "route"}
+    if any(word in normalized for word in endpoint_words):
+        return True
+    return "call" in normalized and any(
+        phrase in normalized
+        for phrase in ("authorization code", "access token", "refresh token")
+    )
+
+
+def _asks_for_duration(query: str) -> bool:
+    normalized = query.lower()
+    return any(
+        phrase in normalized
+        for phrase in (
+            "how long",
+            "valid for",
+            "expires",
+            "expire",
+            "expiration",
+            "ttl",
+            "lifetime",
+        )
+    )
+
+
+def _rerank_score(query: str, doc: Document) -> int:
+    text = doc.page_content.lower()
+    terms = _query_terms(query)
+    phrases = _query_phrases(query)
+
+    score = 0
+    score += 2 * sum(1 for term in terms if term in text)
+    score += 6 * sum(1 for phrase in phrases if phrase in text)
+
+    if _asks_for_endpoint(query):
+        if "endpoint" in text:
+            score += 10
+        if HTTP_METHOD_RE.search(doc.page_content):
+            score += 8
+        if URL_RE.search(doc.page_content):
+            score += 8
+
+    if _asks_for_duration(query):
+        if "ttl" in text:
+            score += 10
+        if "expires_in" in text or "expires in" in text:
+            score += 8
+        if TIME_VALUE_RE.search(text):
+            score += 8
+
+    return score
+
+
+def _rerank(query: str, docs: list[Document]) -> list[Document]:
+    return [
+        doc
+        for _, doc in sorted(
+            enumerate(docs),
+            key=lambda item: (-_rerank_score(query, item[1]), item[0]),
+        )
+    ]
+
+
 def load_vectorstore() -> Chroma:
     _ensure_vectorstore_exists()
     embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
@@ -36,7 +150,9 @@ def load_vectorstore() -> Chroma:
 
 
 def retrieve(query: str, vectorstore: Chroma, k: int = TOP_K) -> list[Document]:
-    return vectorstore.similarity_search(query, k=k)
+    candidate_count = max(CANDIDATE_K, k * 3)
+    candidates = vectorstore.similarity_search(query, k=candidate_count)
+    return _rerank(query, candidates)[:k]
 
 
 if __name__ == "__main__":

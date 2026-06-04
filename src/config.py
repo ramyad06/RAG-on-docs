@@ -11,7 +11,7 @@ EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 50
-TOP_K = 3
+TOP_K = 5
 
 LLM_MODEL = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
 DEEPINFRA_BASE_URL = "https://api.deepinfra.com/v1/openai"

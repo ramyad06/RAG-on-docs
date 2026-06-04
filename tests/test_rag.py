@@ -4,6 +4,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from langchain_core.documents import Document
+
 from src import rag
 
 
@@ -40,3 +42,98 @@ class LoadVectorstoreTest(unittest.TestCase):
                 persist_directory=str(chroma_dir),
                 embedding_function="embeddings",
             )
+
+
+class _FakeVectorstore:
+    def __init__(self, docs):
+        self.docs = docs
+        self.requested_k = None
+
+    def similarity_search(self, query, k):
+        self.requested_k = k
+        return self.docs[:k]
+
+
+class RetrieveTest(unittest.TestCase):
+    def test_retrieve_fetches_more_candidates_and_promotes_endpoint_context(self):
+        docs = [
+            Document(
+                page_content=(
+                    "After redirect, the application gets the authorization code "
+                    "from the URL and uses it to request an access token."
+                )
+            ),
+            Document(page_content="Prerequisites include Client ID and Callback URL."),
+            Document(page_content="The callback returns code=b094053c2892cb819942."),
+            Document(page_content="Access Token Request POST https://example.com/token"),
+            Document(page_content="Supported grants include Authorization Code Grant."),
+            Document(
+                page_content=(
+                    "Step 1. Obtaining an authorization code. Endpoint GET "
+                    "https://www.upwork.com/ab/account-security/oauth2/authorize "
+                    "Parameters response_type required, string. Use code for "
+                    "Authorization Code Grant."
+                )
+            ),
+        ]
+        vectorstore = _FakeVectorstore(docs)
+
+        results = rag.retrieve(
+            "What endpoint do I call to get an authorization code?",
+            vectorstore,
+            k=3,
+        )
+
+        self.assertGreater(vectorstore.requested_k, 3)
+        self.assertIn(
+            "https://www.upwork.com/ab/account-security/oauth2/authorize",
+            results[0].page_content,
+        )
+        self.assertEqual(len(results), 3)
+
+    def test_retrieve_promotes_chunks_with_matching_query_terms(self):
+        docs = [
+            Document(page_content="General Upwork legal terms and platform overview."),
+            Document(page_content="Authentication uses OAuth 2.0 grants."),
+            Document(page_content="The access token TTL is 24 hours."),
+            Document(
+                page_content=(
+                    "Rate limits are 300 requests per minute per IP and "
+                    "40K requests per day."
+                )
+            ),
+        ]
+        vectorstore = _FakeVectorstore(docs)
+
+        results = rag.retrieve(
+            "What is the rate limit per IP?",
+            vectorstore,
+            k=2,
+        )
+
+        self.assertGreater(vectorstore.requested_k, 2)
+        self.assertIn("300 requests per minute per IP", results[0].page_content)
+        self.assertEqual(len(results), 2)
+
+    def test_retrieve_promotes_duration_context_for_validity_questions(self):
+        docs = [
+            Document(page_content="Endpoint POST https://www.upwork.com/api/v3/oauth2/token"),
+            Document(page_content="A valid refresh token can obtain a new access token."),
+            Document(page_content="The access token request returns token fields."),
+            Document(
+                page_content=(
+                    "TTL for an access token is 24 hours; TTL for a refresh "
+                    "token is 2 weeks since its last usage."
+                )
+            ),
+        ]
+        vectorstore = _FakeVectorstore(docs)
+
+        results = rag.retrieve(
+            "How long is an OAuth access token valid for?",
+            vectorstore,
+            k=2,
+        )
+
+        self.assertIn("24 hours", results[0].page_content)
+        self.assertEqual(len(results), 2)
