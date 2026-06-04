@@ -1,42 +1,21 @@
 # Technical Summary — Upwork API Support Bot
 
-## Why overlap matters when chunking technical code (A2)
-
-A 500-character chunk with 50 characters of overlap (10%) preserves continuity at chunk boundaries — critical for technical documentation where meaning frequently spans the cut point. Concretely:
-
-- **Curl examples and JSON payloads** are long; a header definition and the explanation that uses it often land in different chunks. Overlap means the second chunk still carries the tail of the first, so a query like *"what header is required for tenant context"* matches a chunk containing both the header name and surrounding prose.
-- **OAuth flow steps** are sequential ("Step 1: …", "Step 2: …"). Without overlap, the step number can be separated from its body, hurting retrieval relevance.
-- **Parameter tables** ("required, string", "Your Client ID.") often break across boundaries — overlap keeps the parameter name attached to its description in at least one chunk.
-
-## A note on the three eval questions
-
-After ingesting the provided PDF (26 pages, 57,979 chars with `pdfplumber`, 151 chunks), a keyword scan confirms the document contains **no rate-limit content** (0 hits for "rate limit", "per second", "requests per", "throttle", "quota"). The PDF is the *partial* Upwork reference, and the rate-limit section is among the parts omitted. That means eval question #1 is effectively a **hallucination-guard test**: the correct, grounded answer leads with the exact fallback string. Q2 (24-hour TTL) has a verbatim source. Q3 (Client Credentials Grant scope) is an inference grounded in two retrieved facts: *"only available to Enterprise consumers"* and *"access the client's resources"* outside the user context.
-
 ## Difficulties faced
 
-- **Source boundary.** The bot indexes only the provided PDF. Hyperlinked web
-  pages are intentionally excluded so omitted facts, such as rate limits,
-  remain hallucination-guard cases instead of being answered from outside
-  pages.
-- **PDF text quality — diagnosed and fixed.** The first iteration used `pypdf`, which flattens tables into hard-to-parse runs. Empirically, the top-3 chunks for Q3 missed the load-bearing *"only available to Enterprise consumers"* sentence because that sentence lives inside a table-styled section that `pypdf` mangled. Switching to `pdfplumber` and serializing tables back to text rows lifted total extracted characters from 43,445 → 57,979 (+34%) and brought the Enterprise-only chunk into Q3's top-3. The 500/50 chunker is unchanged — we improved the input to it, not the chunker itself.
-- **Embedding model upgrade.** Swapped `all-MiniLM-L6-v2` (22M params, 384-dim) for `BAAI/bge-small-en-v1.5` (33M params, 384-dim). Same dimensionality (no schema change), still local, but a markedly stronger MTEB-retrieval performer on technical English. Together with the loader change, this is what made Q3 surface both premises.
-- **First-run latency.** The `all-MiniLM-L6-v2` model is downloaded on first use (~90 MB) and embedding ~100 chunks takes ~10–20 s on a laptop CPU. Subsequent runs are instant because the Chroma index is persisted to `./chroma_db/`.
-- **Tuning the hallucination guard against the "inference cliff" — and the opposite failure.** The strict fallback rule ("if not in the CONTEXT, say…") was easy to write, but iterating on it surfaced two opposite failure modes. *Too conservative:* Q3 had all the premises in the retrieved chunks ("server-to-server", "the client's resources") yet returned the fallback because the conclusion wasn't verbatim. *Too aggressive:* when the user asks how to search for freelancers, retrieval pulled a `marketplaceJobPostings` (job-search) example, and the model stretched it into an invented "freelancer search" answer — exactly the hallucination the guard is supposed to prevent. Final prompt has four mutually-exclusive cases — *greeting/small-talk*, *direct quote*, *reasoned inference (only when the CONTEXT discusses the same topic)*, *verbatim fallback* — with an explicit anti-pattern (don't pass off a job-search example as a freelancer-search answer) and a "never print the case label" rule. Temperature stays at 0 throughout.
-- **API latency variance.** DeepInfra's Llama-3.1-8B-Instruct-Turbo typically responds in 1–3 s but occasionally spikes. The UI surfaces this with a live latency metric per query.
+- **Keeping answers grounded in the provided PDF only.** Some facts, such as rate limits, are not present in the assignment PDF even though they may exist on linked Upwork pages. I kept the production index limited to the provided document so missing facts trigger the hallucination guard instead of being answered from outside sources.
+- **Chunking technical documentation cleanly.** The PDF mixes prose, OAuth steps, curl examples, GraphQL queries, and table-style parameter lists. I used 500-character chunks with 50-character overlap so required fields, endpoint URLs, and explanations are less likely to be split apart at chunk boundaries.
+- **Improving PDF extraction quality.** `pypdf` flattened tables into hard-to-read text, which caused important rows like Enterprise-only Client Credentials details to retrieve poorly. I switched to `pdfplumber` and serialized tables back into readable text rows before embedding.
+- **Making retrieval adaptive.** Dense retrieval alone sometimes ranked a nearby overview chunk above the exact endpoint or parameter table. I added lightweight reranking and context-derived hints for endpoint, grant-type, TTL, GraphQL status-code, and required-parameter questions so the LLM receives the most relevant source snippets.
+- **Handling latency and deployment constraints.** Local embeddings and Chroma indexing add first-run cost, while DeepInfra responses vary by query. I persisted the Chroma index for Streamlit deployment and surfaced per-query latency in the UI.
 
-## Why I'm a fit for the ProAnalyst AI team
+## How I used LLMs
 
-1. **I ship grounded systems, not demos.** Every design choice here — `temperature=0`, the strict fallback string, the visible sources panel — is about making the bot trustworthy enough to actually deploy to developers, not just impressive in a screenshot.
-2. **I optimize for clarity over cleverness.** Four small modules, each with one job, with shared config in one place. That's what an interview walkthrough rewards, and it's also what a teammate maintaining this in three months will thank me for.
-3. **I treat unknowns honestly.** The hallucination guard isn't a nice-to-have — it's the difference between a support bot and a liability. I'd rather the bot say "I don't know" than make up a rate limit number.
+- I used Claude/GPT to help reason through module boundaries, prompt wording, and edge cases, then validated the suggestions against the actual PDF, retrieval outputs, and live app behavior.
+- I used LLMs to draft and refine the hallucination-guard prompt, especially the distinction between direct answers, grounded inference, and genuinely missing information.
+- I did not rely on generated answers blindly: I added regression tests and live RAG checks for endpoint lookup, OAuth token lifetime, required parameters, GraphQL error behavior, service accounts, subscriptions, metadata queries, and negative trap questions.
 
----
+## Why I am a fit for the ProAnalyst AI team
 
-## How to run
-
-```bash
-pip install -r requirements.txt
-cp .env.example .env             # then paste your DeepInfra key
-python -m src.ingest             # one-time: builds ./chroma_db
-streamlit run app.py
-```
+1. **I build grounded AI systems, not just demos.** The bot is designed to say "I don't know" when the documentation does not support an answer, which is essential for developer-support workflows.
+2. **I debug with evidence.** When answers were wrong, I inspected retrieved chunks, rebuilt the index, adjusted reranking, and verified behavior with tests instead of guessing at prompt changes.
+3. **I care about maintainability.** The project is split into focused modules for ingestion, retrieval, prompting, LLM calls, and UI, making it straightforward to explain, test, deploy, and extend.
