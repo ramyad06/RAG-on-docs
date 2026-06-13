@@ -1,0 +1,17 @@
+"""Shared constants. One place to change paths and model names."""
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+PDF_PATH = PROJECT_ROOT / "API Documentation Partial.pdf"
+CHROMA_DIR = PROJECT_ROOT / "chroma_db"
+COLLECTION_NAME = "upwork_api"
+
+EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
+
+CHUNK_SIZE = 500
+CHUNK_OVERLAP = 50
+TOP_K = 5
+
+LLM_MODEL = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
+DEEPINFRA_BASE_URL = "https://api.deepinfra.com/v1/openai"
