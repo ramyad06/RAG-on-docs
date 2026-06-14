@@ -7,7 +7,7 @@ from __future__ import annotations
 import time
 
 import streamlit as st
-from openai import APIError, APIConnectionError, RateLimitError
+from groq import APIError, APIConnectionError, RateLimitError
 
 from src import llm, rag
 from src.config import CHUNK_OVERLAP, CHUNK_SIZE, EMBEDDING_MODEL, LLM_MODEL, TOP_K
