@@ -56,16 +56,16 @@ def answer_question(question: str, vectorstore) -> None:
     with st.chat_message("assistant"):
         # Live reasoning trace: retrieval first, then streaming generation.
         with st.status("Thinking...", expanded=True) as status:
-            st.write(f"🔎 **Searching docs** for: _{question}_")
+            st.write(f"**Searching docs** for: _{question}_")
             chunks = rag.retrieve(question, vectorstore)
 
-            st.write(f"📄 **Retrieved top-{len(chunks)} chunks:**")
+            st.write(f" **Retrieved top-{len(chunks)} chunks:**")
             for i, c in enumerate(chunks, 1):
                 page = c.metadata.get("page", "?")
                 preview = c.page_content.strip().replace("\n", " ")[:140]
                 st.markdown(f"  {i}. `page {page}` — {preview}…")
 
-            st.write("🤖 **Generating grounded answer** (streaming)...")
+            st.write(" **Generating grounded answer** (streaming)...")
             status.update(label="Reasoning over retrieved context", state="running")
 
         placeholder = st.empty()
@@ -84,7 +84,7 @@ def answer_question(question: str, vectorstore) -> None:
             placeholder.error(str(exc))
             return
 
-        st.caption(f"⏱ {elapsed:.2f} s · top-{len(chunks)} retrieval · streamed")
+        st.caption(f"{elapsed:.2f} s · top-{len(chunks)} retrieval · streamed")
         render_sources(chunks)
 
     st.session_state.messages.append(
@@ -102,7 +102,7 @@ def answer_question(question: str, vectorstore) -> None:
 init_state()
 
 with st.sidebar:
-    st.header("📘 Upwork API Bot")
+    st.header("Upwork API Bot")
     st.write(
         "A retrieval-augmented bot that answers developer questions about the "
         "Upwork API, grounded only in the official documentation."
@@ -123,12 +123,12 @@ with st.sidebar:
             st.rerun()
 
     st.divider()
-    if st.button("🗑 Clear conversation", use_container_width=True):
+    if st.button("Clear conversation", use_container_width=True):
         st.session_state.messages = []
         st.session_state.pending_question = None
         st.rerun()
 
-st.title("📘 Upwork API Support Bot")
+st.title("Upwork API Support Bot")
 st.caption(
     "Ask a question about the Upwork API. Answers are grounded in the official "
     "documentation — if it's not in the docs, the bot will say so."
@@ -146,7 +146,7 @@ for msg in st.session_state.messages:
         st.markdown(msg["content"])
         if msg["role"] == "assistant":
             st.caption(
-                f"⏱ {msg['latency']:.2f} s · top-{len(msg['chunks'])} retrieval"
+                f"{msg['latency']:.2f} s · top-{len(msg['chunks'])} retrieval"
             )
             render_sources(msg["chunks"])
 
