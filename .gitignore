@@ -23,3 +23,6 @@ docs/superpowers/
 # Source documentation — keep local, never push to a public repo.
 docs/*.pdf
 docs/*.docx
+
+# Workshop planning notes — internal only, not for the repo.
+workshop/
