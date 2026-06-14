@@ -13,5 +13,4 @@ CHUNK_SIZE = 500
 CHUNK_OVERLAP = 50
 TOP_K = 5
 
-LLM_MODEL = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
-DEEPINFRA_BASE_URL = "https://api.deepinfra.com/v1/openai"
+LLM_MODEL = "llama-3.1-8b-instant"

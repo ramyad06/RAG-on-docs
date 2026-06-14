@@ -1,4 +1,4 @@
-"""LLM layer: DeepInfra OpenAI-compatible client, prompted call, latency timing."""
+"""LLM layer: Groq client, prompted call, latency timing."""
 from __future__ import annotations
 
 import functools
@@ -8,10 +8,10 @@ from dataclasses import dataclass
 from typing import Iterator
 
 from dotenv import load_dotenv
+from groq import Groq
 from langchain_core.documents import Document
-from openai import OpenAI
 
-from src.config import DEEPINFRA_BASE_URL, LLM_MODEL
+from src.config import LLM_MODEL
 from src.prompts import SYSTEM_PROMPT, build_user_message
 
 load_dotenv()
@@ -24,14 +24,14 @@ class Answer:
 
 
 @functools.lru_cache(maxsize=1)
-def _get_client() -> OpenAI:
-    key = os.environ.get("DEEPINFRA_API_KEY")
+def _get_client() -> Groq:
+    key = os.environ.get("GROQ_API_KEY")
     if not key:
         raise RuntimeError(
-            "DEEPINFRA_API_KEY is not set. Copy .env.example to .env "
-            "and add your key."
+            "GROQ_API_KEY is not set. Copy .env.example to .env "
+            "and add your key. Get one free at https://console.groq.com/keys"
         )
-    return OpenAI(api_key=key, base_url=DEEPINFRA_BASE_URL)
+    return Groq(api_key=key)
 
 
 def _build_messages(question: str, chunks: list[Document]) -> list[dict]:
@@ -51,7 +51,7 @@ def answer(question: str, chunks: list[Document]) -> Answer:
     )
     elapsed = time.perf_counter() - start
 
-    # message.content is Optional[str] in the OpenAI SDK; guard it.
+    # message.content is Optional[str] in the Groq SDK; guard it.
     text = (resp.choices[0].message.content or "").strip()
     return Answer(text=text, latency_seconds=elapsed)
 

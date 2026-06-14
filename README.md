@@ -12,7 +12,7 @@ the bot says so — it never fabricates information.
 | Vector store | ChromaDB (persisted at `./chroma_db/`) |
 | Embeddings | `BAAI/bge-small-en-v1.5` (local, no API cost) |
 | PDF extraction | `pdfplumber` with table-row serialization |
-| LLM | Meta-Llama-3.1-8B-Instruct-Turbo via DeepInfra (streaming) |
+| LLM | `llama-3.1-8b-instant` via Groq (streaming) |
 | UI | Streamlit (chat layout, live reasoning trace, sidebar) |
 
 ## Project layout
@@ -48,8 +48,8 @@ cd solution   # or: cd starter
 uv sync       # creates .venv and installs all dependencies
 
 cp ../.env.example .env
-# Open .env and paste your DeepInfra API key
-# Get one free at https://deepinfra.com/dash/api_keys
+# Open .env and paste your Groq API key
+# Get one free at https://console.groq.com/keys
 ```
 
 **Windows (PowerShell)**
@@ -61,8 +61,8 @@ cd solution   # or: cd starter
 uv sync       # creates .venv and installs all dependencies
 
 copy .env.example .env
-# Open .env and paste your DeepInfra API key
-# Get one free at https://deepinfra.com/dash/api_keys
+# Open .env and paste your Groq API key
+# Get one free at https://console.groq.com/keys
 ```
 
 ## Run
@@ -91,7 +91,7 @@ uv run pytest tests/
 - Add this secret in Streamlit's Advanced settings:
 
 ```toml
-DEEPINFRA_API_KEY = "your_deepinfra_api_key_here"
+GROQ_API_KEY = "your_groq_api_key_here"
 ```
 
 The committed `chroma_db/` index means the app starts without needing the private PDF in the repo.
